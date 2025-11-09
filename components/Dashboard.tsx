@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useMemo } from 'react';
 import type { Agent } from '../types';
 import { Brain, Plus, Clock, Pause, Play, Trash2 } from './icons';
 
@@ -10,30 +10,83 @@ interface DashboardProps {
   onDeleteAgent: (agent: Agent) => void;
 }
 
+const priorityMap: Record<string, { label: string; color: string; sort: number }> = {
+  high: { label: 'High', color: 'bg-red-500', sort: 3 },
+  medium: { label: 'Medium', color: 'bg-yellow-500', sort: 2 },
+  low: { label: 'Low', color: 'bg-green-500', sort: 1 },
+};
+
 const Dashboard: React.FC<DashboardProps> = ({ agents, onNewAgent, onSelectAgent, onToggleStatus, onDeleteAgent }) => {
-  const activeAgents = agents.filter(a => a.status !== 'archived');
+  const [filter, setFilter] = useState<'all' | 'active' | 'paused'>('all');
+  const [sortBy, setSortBy] = useState<'priority' | 'progress' | 'date'>('priority');
+  
+  const filteredAndSortedAgents = useMemo(() => {
+    const activeAgents = agents.filter(a => a.status !== 'archived');
+    
+    const filtered = activeAgents.filter(agent => {
+      if (filter === 'all') return true;
+      return agent.status === filter;
+    });
+
+    return filtered.sort((a, b) => {
+      switch (sortBy) {
+        case 'priority':
+          return (priorityMap[b.priority]?.sort || 0) - (priorityMap[a.priority]?.sort || 0);
+        case 'progress':
+          return b.progress - a.progress;
+        case 'date':
+          return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+        default:
+          return 0;
+      }
+    });
+  }, [agents, filter, sortBy]);
 
   return (
     <div className="p-4 sm:p-8">
-      <div className="mb-8">
-        <h1 className="text-4xl font-bold text-gray-800 dark:text-gray-100 mb-2">Dashboard</h1>
-        <p className="text-gray-600 dark:text-gray-400">Your autonomous AI agents.</p>
+      <div className="flex flex-wrap items-center justify-between gap-4 mb-8">
+        <div>
+          <h1 className="text-4xl font-bold text-gray-800 dark:text-gray-100 mb-2">Agent Dashboard</h1>
+          <p className="text-gray-600 dark:text-gray-400">Manage your autonomous AI agents.</p>
+        </div>
+        <div className="flex items-center gap-2">
+            <div className="flex items-center rounded-lg bg-gray-200/50 dark:bg-gray-700/50 p-1">
+                {(['all', 'active', 'paused'] as const).map(f => (
+                    <button 
+                        key={f}
+                        onClick={() => setFilter(f)}
+                        className={`px-3 py-1.5 text-sm font-semibold rounded-md capitalize transition-colors ${filter === f ? 'bg-white text-blue-600 shadow-sm dark:bg-gray-800' : 'text-gray-600 hover:text-gray-800 dark:text-gray-400 dark:hover:text-gray-200'}`}
+                    >
+                        {f}
+                    </button>
+                ))}
+            </div>
+            <select
+                value={sortBy}
+                onChange={(e) => setSortBy(e.target.value as any)}
+                className="px-3 py-2 text-sm font-semibold bg-white dark:bg-gray-800 border-gray-300 dark:border-gray-600 border rounded-lg shadow-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+                <option value="priority">Sort by Priority</option>
+                <option value="progress">Sort by Progress</option>
+                <option value="date">Sort by Date</option>
+            </select>
+        </div>
       </div>
 
-      {activeAgents.length === 0 ? (
+      {filteredAndSortedAgents.length === 0 ? (
         <div className="text-center py-16 border-2 border-dashed border-gray-300 dark:border-gray-700 rounded-xl bg-white/50 dark:bg-gray-800/20">
           <div className="w-24 h-24 bg-blue-100 dark:bg-blue-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
             <Brain className="w-12 h-12 text-blue-600 dark:text-blue-400" />
           </div>
-          <h2 className="text-2xl font-bold mb-2 dark:text-white">No Agents Yet</h2>
-          <p className="text-gray-600 dark:text-gray-400 mb-6">Create your first agent to get started.</p>
+          <h2 className="text-2xl font-bold mb-2 dark:text-white">No Agents to Display</h2>
+          <p className="text-gray-600 dark:text-gray-400 mb-6">{filter === 'all' ? 'Create your first agent to get started.' : `No agents match the current filter.`}</p>
           <button onClick={onNewAgent} className="px-6 py-3 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 inline-flex items-center gap-2">
             <Plus className="w-5 h-5" />Create Agent
           </button>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {activeAgents.map(agent => (
+          {filteredAndSortedAgents.map(agent => (
             <div key={agent.id} className="bg-white dark:bg-gray-800 rounded-2xl shadow-md p-6 hover:shadow-xl transition-shadow duration-300 flex flex-col">
               <div className="flex-grow">
                 <div className="flex items-start justify-between mb-4">
@@ -43,7 +96,13 @@ const Dashboard: React.FC<DashboardProps> = ({ agents, onNewAgent, onSelectAgent
                     </div>
                     <div>
                       <h3 className="font-bold text-lg text-gray-800 dark:text-gray-100 line-clamp-1">{agent.name}</h3>
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${agent.status === 'active' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' : 'bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-300'}`}>{agent.status}</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`text-[10px] px-2 py-0.5 rounded-full font-semibold uppercase tracking-wider ${agent.status === 'active' ? 'bg-green-100 text-green-800 dark:bg-green-900/50 dark:text-green-300' : 'bg-gray-200 text-gray-600 dark:bg-gray-600 dark:text-gray-300'}`}>{agent.status}</span>
+                         <span className="flex items-center gap-1.5 text-xs text-gray-500 dark:text-gray-400">
+                           <span className={`w-2 h-2 rounded-full ${priorityMap[agent.priority]?.color || 'bg-gray-400'}`}></span>
+                           {priorityMap[agent.priority]?.label || 'Normal'}
+                         </span>
+                      </div>
                     </div>
                   </div>
                 </div>

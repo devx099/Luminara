@@ -12,6 +12,7 @@ export interface Task {
   last_error?: string;
   action_ref?: any;
   idempotency_key?: string;
+  source_urls?: { title: string; uri: string }[];
 }
 
 export interface Message {
@@ -20,6 +21,14 @@ export interface Message {
   timestamp: string;
   action?: 'confirm_mark_all';
   task_ids?: string[];
+}
+
+export interface ActionLogEntry {
+  timestamp: string;
+  taskId: string;
+  taskTitle: string;
+  status: 'success' | 'failure';
+  error?: string;
 }
 
 export interface Agent {
@@ -40,7 +49,7 @@ export interface Agent {
     max_daily_actions: number;
     granularity: 'minimal' | 'balanced' | 'detailed';
   };
-  actions_log: any[];
+  actions_log: ActionLogEntry[];
 }
 
 export interface UserProfile {

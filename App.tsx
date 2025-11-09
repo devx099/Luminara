@@ -1,7 +1,7 @@
 import React, { useState, useRef, useCallback, useEffect } from 'react';
-import { Brain, Plus, Settings } from './components/icons';
-import type { Agent, Task, Message, UserProfile, ToastState } from './types';
-import { generateAgentPlan, generateChatMessage, detectCompletedTasksFromChat } from './services/geminiService';
+import { Brain, Plus, Settings, LogOut, Home, CalendarDays } from './components/icons';
+import type { Agent, Task, Message, UserProfile, ToastState, ActionLogEntry } from './types';
+import { generateChatMessage, detectCompletedTasksFromChat } from './services/geminiService';
 import useLocalStorage from './hooks/useLocalStorage';
 import Dashboard from './components/Dashboard';
 import WorkspaceView from './components/WorkspaceView';
@@ -9,6 +9,9 @@ import WizardView from './components/WizardView';
 import DeleteConfirmModal from './components/DeleteConfirmModal';
 import Toast from './components/Toast';
 import SettingsView from './components/SettingsView';
+import LoginPage from './components/LoginPage';
+import HomeView from './components/HomeView';
+import CalendarView from './components/CalendarView';
 import { findBestTaskMatch } from './utils';
 
 const generateUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, c => {
@@ -17,8 +20,10 @@ const generateUUID = () => 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/
   return v.toString(16);
 });
 
+type ViewType = 'home' | 'dashboard' | 'workspace' | 'calendar';
+
 const App: React.FC = () => {
-  const [view, setView] = useState<'dashboard' | 'workspace'>('dashboard');
+  const [view, setView] = useState<ViewType>('home');
   const [agents, setAgents] = useLocalStorage<Agent[]>('luminara-agents', []);
   const [userProfile, setUserProfile] = useLocalStorage<UserProfile>('luminara-profile', {
     name: "Dev Sharma",
@@ -41,6 +46,16 @@ const App: React.FC = () => {
   const [executingTasks, setExecutingTasks] = useState<Set<string>>(new Set());
   const [toast, setToast] = useState<ToastState | null>(null);
   const toastTimeoutRef = useRef<number | null>(null);
+  const [isAuthenticated, setIsAuthenticated] = useState(false);
+
+  useEffect(() => {
+    // On initial load, check if the user is already authenticated
+    const loggedIn = localStorage.getItem('luminara-auth') === 'true';
+    if (loggedIn) {
+        setIsAuthenticated(true);
+        setView('home');
+    }
+  }, []);
 
   useEffect(() => {
     const root = window.document.documentElement;
@@ -75,15 +90,33 @@ const App: React.FC = () => {
     }, undoAction ? 10000 : 4000);
   }, []);
 
-  const createAgent = async (params: any) => {
-    const { wizardGoal, wizardDeadline, wizardDailyHours, wizardGranularity, wizardPriority, wizardAutoExecute } = params;
-    try {
-      const plan = await generateAgentPlan(wizardGoal, {
-        deadline: wizardDeadline,
-        daily_hours: wizardDailyHours,
-        granularity: wizardGranularity,
-      });
+  const handleLogin = (email: string, password: string) => {
+    setUserProfile(p => ({ ...p, email }));
+    setIsAuthenticated(true);
+    setView('home');
+    localStorage.setItem('luminara-auth', 'true');
+    showToast(`Welcome back, ${userProfile.name}!`, 'success');
+  };
 
+  const handleRegister = (name: string, email: string, password: string) => {
+    setUserProfile(p => ({ ...p, name, email }));
+    setIsAuthenticated(true);
+    setView('home');
+    localStorage.setItem('luminara-auth', 'true');
+    showToast(`Welcome, ${name}! Your account has been created.`, 'success');
+  };
+
+  const handleLogout = () => {
+    setIsAuthenticated(false);
+    localStorage.removeItem('luminara-auth');
+    setView('home');
+    setSelectedAgent(null);
+    showToast('You have been logged out.', 'info');
+  };
+
+  const createAgent = async (plan: any, params: any) => {
+    const { wizardGoal, wizardDeadline, wizardPriority, wizardGranularity, wizardAutoExecute } = params;
+    try {
       const newAgent: Agent = {
         id: generateUUID(),
         name: plan.agent_name,
@@ -158,6 +191,12 @@ const App: React.FC = () => {
 
     setExecutingTasks(prev => new Set(prev).add(taskId));
     updateTask(agentId, taskId, { status: 'in_progress' });
+    
+    const logEntry: Omit<ActionLogEntry, 'status' | 'error'> = {
+        timestamp: new Date().toISOString(),
+        taskId: task.id,
+        taskTitle: task.title,
+    };
 
     try {
       await new Promise(resolve => setTimeout(resolve, 1500)); 
@@ -171,7 +210,8 @@ const App: React.FC = () => {
                 role: 'system',
                 content: `✓ Agent completed task: **"${task.title}"**.`,
                 timestamp: new Date().toISOString()
-            }]
+            }],
+            actions_log: [...agent.actions_log, { ...logEntry, status: 'success' }]
         }));
       } else {
         throw new Error('Simulated action failure');
@@ -179,6 +219,9 @@ const App: React.FC = () => {
     } catch (error: any) {
       updateTask(agentId, taskId, { status: 'failed', last_error: error.message });
       showToast(`Action for "${task.title}" failed.`, 'error');
+      updateAgent(agentId, agent => ({
+          actions_log: [...agent.actions_log, { ...logEntry, status: 'failure', error: error.message }]
+      }));
     } finally {
       setExecutingTasks(prev => {
         const next = new Set(prev);
@@ -266,12 +309,33 @@ const App: React.FC = () => {
         return { config: { ...agent.config, auto_execute: newValue } };
     });
   };
+  
+  const navigateTo = (newView: ViewType) => {
+    if (newView !== 'workspace') {
+      setSelectedAgent(null);
+    }
+    setView(newView);
+  }
+
+  const handleSelectAgent = (agent: Agent) => {
+    setSelectedAgent(agent);
+    setView('workspace');
+  };
+
+  if (!isAuthenticated) {
+    return (
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800">
+            <LoginPage onLogin={handleLogin} onRegister={handleRegister} />
+            <Toast toast={toast} />
+        </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 font-sans text-gray-900 dark:text-gray-200">
-      <nav className="bg-white/80 dark:bg-gray-800/80 shadow-sm backdrop-blur-md sticky top-0 z-10 dark:shadow-gray-700/[.2]">
+      <nav className="bg-white/80 dark:bg-gray-800/80 shadow-sm backdrop-blur-md sticky top-0 z-20 dark:shadow-gray-700/[.2]">
         <div className="px-4 sm:px-8 py-3 flex items-center justify-between">
-          <div className="flex items-center gap-3 cursor-pointer" onClick={() => {setView('dashboard'); setSelectedAgent(null);}}>
+          <div className="flex items-center gap-3 cursor-pointer" onClick={() => navigateTo('home')}>
             <div className="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-lg flex items-center justify-center">
               <Brain className="w-6 h-6 text-white" />
             </div>
@@ -282,35 +346,65 @@ const App: React.FC = () => {
           </div>
           <div className="flex items-center gap-2">
             <button 
-              onClick={() => {setView('dashboard'); setSelectedAgent(null);}} 
-              className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${view === 'dashboard' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300' : 'bg-white hover:bg-gray-100 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300'}`}
+              onClick={() => navigateTo('home')} 
+              className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors flex items-center gap-2 ${view === 'home' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300' : 'bg-transparent hover:bg-gray-100/50 text-gray-700 dark:hover:bg-gray-700/50 dark:text-gray-300'}`}
+            >
+              <Home className="w-4 h-4" /> Home
+            </button>
+             <button 
+              onClick={() => navigateTo('dashboard')} 
+              className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors ${view === 'dashboard' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300' : 'bg-transparent hover:bg-gray-100/50 text-gray-700 dark:hover:bg-gray-700/50 dark:text-gray-300'}`}
             >
               Dashboard
+            </button>
+            <button 
+              onClick={() => navigateTo('calendar')} 
+              className={`px-4 py-2 rounded-lg font-semibold text-sm transition-colors flex items-center gap-2 ${view === 'calendar' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/20 dark:text-blue-300' : 'bg-transparent hover:bg-gray-100/50 text-gray-700 dark:hover:bg-gray-700/50 dark:text-gray-300'}`}
+            >
+              <CalendarDays className="w-4 h-4" /> Calendar
             </button>
             <button onClick={() => setShowWizard(true)} className="px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 flex items-center gap-2 text-sm">
               <Plus className="w-4 h-4" />New Agent
             </button>
-             <button onClick={() => setShowSettings(true)} className="p-2 rounded-lg bg-white hover:bg-gray-100 text-gray-700 dark:bg-gray-700 dark:hover:bg-gray-600 dark:text-gray-300 transition-colors">
+             <button onClick={() => setShowSettings(true)} className="p-2 rounded-lg hover:bg-gray-100/50 text-gray-700 dark:hover:bg-gray-700/50 dark:text-gray-300 transition-colors">
               <Settings className="w-5 h-5" />
+            </button>
+            <button onClick={handleLogout} className="p-2 rounded-lg hover:bg-gray-100/50 text-gray-700 dark:hover:bg-gray-700/50 dark:text-gray-300 transition-colors">
+              <LogOut className="w-5 h-5" />
             </button>
           </div>
         </div>
       </nav>
 
       <main>
+        {view === 'home' && (
+            <HomeView 
+                userProfile={userProfile}
+                agents={agents}
+                onNavigateToDashboard={() => navigateTo('dashboard')}
+                onNewAgent={() => setShowWizard(true)}
+            />
+        )}
         {view === 'dashboard' && (
           <Dashboard
             agents={agents}
             onNewAgent={() => setShowWizard(true)}
-            onSelectAgent={(agent) => { setSelectedAgent(agent); setView('workspace'); }}
+            onSelectAgent={handleSelectAgent}
             onToggleStatus={toggleStatus}
             onDeleteAgent={(agent) => setShowDeleteConfirm(agent)}
           />
         )}
+        {view === 'calendar' && (
+            <CalendarView 
+                agents={agents}
+                onSelectAgent={handleSelectAgent}
+            />
+        )}
         {view === 'workspace' && selectedAgent && (
           <WorkspaceView
+            key={selectedAgent.id} // Add key to force re-mount on agent change
             agent={selectedAgent}
-            onBack={() => { setView('dashboard'); setSelectedAgent(null); }}
+            onBack={() => navigateTo('dashboard')}
             onToggleAutoExecute={toggleAutoExecute}
             onExecuteAction={executeAction}
             onSendMessage={sendMessage}

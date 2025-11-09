@@ -9,15 +9,6 @@ interface SettingsViewProps {
   showToast: (message: string, type: 'success' | 'error' | 'info') => void;
 }
 
-const GoogleIcon = () => (
-    <svg viewBox="0 0 48 48" className="w-5 h-5">
-      <path fill="#FFC107" d="M43.611 20.083H42V20H24v8h11.303c-1.649 4.657-6.08 8-11.303 8c-6.627 0-12-5.373-12-12s5.373-12 12-12c3.059 0 5.842 1.154 7.961 3.039L38.485 13.55C34.643 9.947 29.625 8 24 8c-8.837 0-16 7.163-16 16s7.163 16 16 16c9.233 0 15.365-6.447 15.365-15.655c0-1.022-.103-2.022-.288-3.003H43.611z"></path>
-      <path fill="#FF3D00" d="M6.306 14.691c-1.229 1.996-1.996 4.314-1.996 6.819s.767 4.823 1.996 6.819L1.925 32.193C.723 29.544 0 26.83 0 24s.723-5.544 1.925-8.193l4.381 3.884z"></path>
-      <path fill="#4CAF50" d="M24 48c5.636 0 10.659-1.949 14.161-5.181l-4.484-3.884c-1.879 1.28-4.291 2.064-7.073 2.064c-5.238 0-9.83-3.37-11.45-8.016l-4.59 3.667C6.189 42.632 14.28 48 24 48z"></path>
-      <path fill="#1976D2" d="M43.611 20.083L48 20V20c0-2.316-.368-4.536-1.033-6.625l-4.577 3.545c.421.986.65 2.078.65 3.239v.083H43.611z"></path>
-    </svg>
-);
-
 const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdateProfile, onClose, showToast }) => {
   const [profile, setProfile] = useState<UserProfile>(userProfile);
 
@@ -30,21 +21,12 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdateProfil
     showToast('Settings saved successfully!', 'success');
     onClose();
   };
-  
-  const handleGoogleConnect = () => {
-    onUpdateProfile(p => ({ ...p, isGoogleConnected: true }));
-    showToast('Google Account connected!', 'success');
-  };
-
-  const handleGoogleDisconnect = () => {
-    onUpdateProfile(p => ({ ...p, isGoogleConnected: false }));
-    showToast('Google Account disconnected.', 'info');
-  };
 
   const handleReset = () => {
     if (window.confirm('Are you sure you want to reset all application data? This cannot be undone.')) {
         localStorage.removeItem('luminara-agents');
         localStorage.removeItem('luminara-profile');
+        localStorage.removeItem('luminara-auth');
         showToast('Application data has been reset.', 'info');
         window.location.reload();
     }
@@ -138,32 +120,6 @@ const SettingsView: React.FC<SettingsViewProps> = ({ userProfile, onUpdateProfil
             </div>
           </section>
 
-          {/* Integrations Section */}
-          <section>
-            <h3 className="text-lg font-semibold mb-4 border-b pb-2 dark:text-gray-200 dark:border-gray-600">Integrations</h3>
-             <div className="bg-gray-50 dark:bg-gray-700/50 p-4 rounded-lg">
-                <div className="flex items-center justify-between">
-                    <div>
-                        <h4 className="font-semibold dark:text-gray-200">Google Account</h4>
-                        <p className="text-sm text-gray-600 dark:text-gray-400">Sync with Google Calendar and Tasks.</p>
-                    </div>
-                    {profile.isGoogleConnected ? (
-                        <div className="flex items-center gap-3">
-                            <span className="text-sm text-gray-800 dark:text-gray-300 hidden sm:block">{profile.email}</span>
-                            <button onClick={handleGoogleDisconnect} className="px-4 py-2 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-semibold hover:bg-gray-100 dark:hover:bg-gray-700 dark:text-gray-200">
-                                Disconnect
-                            </button>
-                        </div>
-                    ) : (
-                       <button onClick={handleGoogleConnect} className="px-4 py-2 bg-white dark:bg-gray-700 border border-gray-300 dark:border-gray-600 rounded-lg text-sm font-semibold text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-gray-600 flex items-center justify-center gap-2">
-                            <GoogleIcon />
-                            Connect with Google
-                        </button>
-                    )}
-                </div>
-             </div>
-          </section>
-          
            {/* Data Management Section */}
           <section>
             <h3 className="text-lg font-semibold mb-4 border-b pb-2 dark:text-gray-200 dark:border-gray-600">Data Management</h3>

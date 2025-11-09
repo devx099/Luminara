@@ -17,4 +17,12 @@ export {
   X,
   Check,
   Settings,
+  LogOut,
+  Home,
+  BarChart,
+  FileText,
+  CalendarDays,
+  Link,
+  ArrowLeft,
+  ArrowRight,
 } from 'lucide-react';
